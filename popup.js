@@ -42,7 +42,7 @@ async function loadStats() {
 
   for (const tab of tabs) {
     if (tab.pinned || tab.active) continue;
-    const lastActive = tabActivity[tab.id];
+    const lastActive = tabActivity[tab.url];
     if (!lastActive) continue;
 
     const elapsed = now - lastActive;

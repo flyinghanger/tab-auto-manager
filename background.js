@@ -12,25 +12,44 @@ const PROTECTED_SCHEMES = ['chrome://', 'chrome-extension://', 'devtools://'];
 
 chrome.runtime.onInstalled.addListener(async () => {
   await setupAlarms();
-  // Seed existing tabs with current timestamp (don't overwrite existing records)
-  const { tabActivity = {} } = await chrome.storage.local.get('tabActivity');
-  const tabs = await chrome.tabs.query({});
-  const now = Date.now();
-  let changed = false;
-  for (const tab of tabs) {
-    if (!tabActivity[tab.id]) {
-      tabActivity[tab.id] = now;
-      changed = true;
-    }
-  }
-  if (changed) await chrome.storage.local.set({ tabActivity });
+  await reconcileTabs();
   await updateBadge();
 });
 
 chrome.runtime.onStartup.addListener(async () => {
   await setupAlarms();
+  await reconcileTabs();
   await updateBadge();
 });
+
+// Rebuild tabIdToUrl mapping and recover activity timestamps by URL
+async function reconcileTabs() {
+  const { tabActivity = {} } = await chrome.storage.local.get('tabActivity');
+  const tabs = await chrome.tabs.query({});
+  const now = Date.now();
+
+  const newTabIdToUrl = {};
+  const activeUrls = new Set();
+
+  for (const tab of tabs) {
+    if (!tab.url) continue;
+    newTabIdToUrl[tab.id] = tab.url;
+    activeUrls.add(tab.url);
+    // Only seed if no existing record for this URL
+    if (!tabActivity[tab.url]) {
+      tabActivity[tab.url] = now;
+    }
+  }
+
+  // Clean up URLs that no longer have any open tab
+  for (const url of Object.keys(tabActivity)) {
+    if (!activeUrls.has(url)) {
+      delete tabActivity[url];
+    }
+  }
+
+  await chrome.storage.local.set({ tabActivity, tabIdToUrl: newTabIdToUrl });
+}
 
 async function setupAlarms() {
   await chrome.alarms.create(ALARM_NAME, { periodInMinutes: CHECK_INTERVAL_MINUTES });
@@ -54,9 +73,19 @@ chrome.tabs.onCreated.addListener(async (tab) => {
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const { tabActivity = {} } = await chrome.storage.local.get('tabActivity');
-  delete tabActivity[tabId];
-  await chrome.storage.local.set({ tabActivity });
+  const { tabActivity = {}, tabIdToUrl = {} } = await chrome.storage.local.get(['tabActivity', 'tabIdToUrl']);
+  const url = tabIdToUrl[tabId];
+  delete tabIdToUrl[tabId];
+
+  if (url) {
+    // Only delete URL record if no other tab has the same URL
+    const sameTabs = Object.values(tabIdToUrl).filter((u) => u === url);
+    if (sameTabs.length === 0) {
+      delete tabActivity[url];
+    }
+  }
+
+  await chrome.storage.local.set({ tabActivity, tabIdToUrl });
   await updateBadge();
 });
 
@@ -68,9 +97,12 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 });
 
 async function recordActivity(tabId) {
-  const { tabActivity = {} } = await chrome.storage.local.get('tabActivity');
-  tabActivity[tabId] = Date.now();
-  await chrome.storage.local.set({ tabActivity });
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab?.url) return;
+  const { tabActivity = {}, tabIdToUrl = {} } = await chrome.storage.local.get(['tabActivity', 'tabIdToUrl']);
+  tabActivity[tab.url] = Date.now();
+  tabIdToUrl[tabId] = tab.url;
+  await chrome.storage.local.set({ tabActivity, tabIdToUrl });
 }
 
 // ─── Alarms ─────────────────────────────────────────────────
@@ -134,7 +166,7 @@ async function updateBadge() {
   let count = 0;
   for (const tab of tabs) {
     if (tab.pinned || tab.active) continue;
-    const lastActive = tabActivity[tab.id];
+    const lastActive = tabActivity[tab.url];
     if (!lastActive) continue;
     if (now - lastActive > soonMs) count++;
   }
@@ -146,8 +178,8 @@ async function updateBadge() {
 // ─── Cleanup ────────────────────────────────────────────────
 
 async function cleanupInactiveTabs() {
-  const { tabActivity = {} } = await chrome.storage.local.get('tabActivity');
-  const { notifiedTabs = {} } = await chrome.storage.local.get('notifiedTabs');
+  const { tabActivity = {}, tabIdToUrl = {} } = await chrome.storage.local.get(['tabActivity', 'tabIdToUrl']);
+  const { notifiedUrls = {} } = await chrome.storage.local.get('notifiedUrls');
   const settings = await getSettings();
 
   if (!settings.enabled) return;
@@ -169,16 +201,18 @@ async function cleanupInactiveTabs() {
   for (const tab of tabs) {
     if (tab.pinned) continue;
     if (tab.active) continue;
-    if (PROTECTED_SCHEMES.some((s) => tab.url?.startsWith(s))) continue;
+    if (!tab.url) continue;
+    if (PROTECTED_SCHEMES.some((s) => tab.url.startsWith(s))) continue;
     if (windowTabCounts[tab.windowId] <= 1) continue;
     if (isWhitelisted(tab.url, settings.whitelist)) continue;
 
     // Skip grouped tabs if setting enabled
     if (settings.skipGroupedTabs && tab.groupId !== -1) continue;
 
-    const lastActive = tabActivity[tab.id];
+    const lastActive = tabActivity[tab.url];
     if (!lastActive) {
-      tabActivity[tab.id] = now;
+      tabActivity[tab.url] = now;
+      tabIdToUrl[tab.id] = tab.url;
       continue;
     }
 
@@ -194,16 +228,21 @@ async function cleanupInactiveTabs() {
         closedAt: now,
       });
       await chrome.tabs.remove(tab.id);
-      delete tabActivity[tab.id];
-      delete notifiedTabs[tab.id];
+      delete tabIdToUrl[tab.id];
+      // Only delete URL record if no other tab has the same URL
+      const sameTabs = Object.entries(tabIdToUrl).filter(([, u]) => u === tab.url);
+      if (sameTabs.length === 0) {
+        delete tabActivity[tab.url];
+        delete notifiedUrls[tab.url];
+      }
       windowTabCounts[tab.windowId]--;
       continue;
     }
 
     // Tab is about to expire → notify
-    if (settings.notifyBeforeClose && timeLeft <= NOTIFY_BEFORE_MS && !notifiedTabs[tab.id]) {
+    if (settings.notifyBeforeClose && timeLeft <= NOTIFY_BEFORE_MS && !notifiedUrls[tab.url]) {
       aboutToExpire.push(tab);
-      notifiedTabs[tab.id] = true;
+      notifiedUrls[tab.url] = true;
     }
   }
 
@@ -229,13 +268,13 @@ async function cleanupInactiveTabs() {
     await chrome.storage.local.set({ closedHistory: updated });
   }
 
-  // Clean up notifiedTabs for tabs that no longer exist
-  const tabIds = new Set(tabs.map((t) => t.id));
-  for (const id of Object.keys(notifiedTabs)) {
-    if (!tabIds.has(Number(id))) delete notifiedTabs[id];
+  // Clean up notifiedUrls for URLs that no longer have open tabs
+  const openUrls = new Set(tabs.map((t) => t.url).filter(Boolean));
+  for (const url of Object.keys(notifiedUrls)) {
+    if (!openUrls.has(url)) delete notifiedUrls[url];
   }
 
-  await chrome.storage.local.set({ tabActivity, notifiedTabs });
+  await chrome.storage.local.set({ tabActivity, tabIdToUrl, notifiedUrls });
 }
 
 // ─── Message handler (for popup communication) ─────────────
