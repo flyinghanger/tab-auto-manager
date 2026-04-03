@@ -63,14 +63,31 @@ function getBestUnit(seconds) {
   return 1;
 }
 
+function isWhitelisted(url, whitelist) {
+  if (!url) return false;
+  try {
+    const hostname = new URL(url).hostname;
+    return whitelist.some((pattern) => {
+      if (pattern.startsWith('*.')) {
+        const domain = pattern.slice(2);
+        return hostname === domain || hostname.endsWith('.' + domain);
+      }
+      return hostname === pattern || hostname === 'www.' + pattern;
+    });
+  } catch {
+    return false;
+  }
+}
+
 // ─── Stats & Tab Lists ─────────────────────────────────────
 
 async function loadStats() {
   const [{ tabActivity = {}, closedHistory = [] }, syncData] =
     await Promise.all([
       chrome.storage.local.get(['tabActivity', 'closedHistory']),
-      chrome.storage.sync.get({ expireSeconds: null, expireDays: null }),
+      chrome.storage.sync.get({ expireSeconds: null, expireDays: null, whitelist: [] }),
     ]);
+  const whitelist = syncData.whitelist || [];
 
   const expireSeconds = syncData.expireSeconds ?? (syncData.expireDays || 3) * 86400;
   const tabs = await chrome.tabs.query({});
@@ -83,6 +100,7 @@ async function loadStats() {
   for (const tab of tabs) {
     if (tab.pinned || tab.active) continue;
     if (!tab.url || PROTECTED_SCHEMES.some((s) => tab.url.startsWith(s))) continue;
+    if (isWhitelisted(tab.url, whitelist)) continue;
     const lastActive = tabActivity[tab.url];
     if (!lastActive) continue;
 
