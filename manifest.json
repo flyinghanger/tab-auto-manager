@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Tab Auto Manager",
+  "name": "TabFade",
   "version": "1.0.0",
-  "description": "Automatically close inactive tabs after a set period, like Arc browser",
+  "description": "Auto-close inactive tabs after a set period. Keep your browser clean, like Arc.",
   "permissions": [
     "tabs",
     "storage",
