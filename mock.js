@@ -12,7 +12,7 @@ const MOCK_TABS = [
   { id: 10, windowId: 1, active: false, pinned: false, groupId: -1, title: 'Hacker News', url: 'https://news.ycombinator.com/', favIconUrl: '' },
 ];
 
-const MOCK_EXPIRE_SECONDS = 30;
+const MOCK_EXPIRE_SECONDS = 5 * 60; // 5 minutes for visible spread
 
 const mockSyncStorage = {
   expireSeconds: MOCK_EXPIRE_SECONDS,
@@ -39,15 +39,15 @@ const mockLocalStorage = {
   const expireMs = MOCK_EXPIRE_SECONDS * 1000;
   const ages = {
     'http://localhost:3000/preview.html': 0,         // active, just now
-    'https://mail.google.com/mail/u/0/#inbox': 0.1,  // whitelisted, fresh
-    'https://github.com/': 0.5,                      // 50% — safe
-    'https://react.dev/': 0.3,                       // grouped, 30%
-    'https://news.ycombinator.com/': 0.4,            // 40% — safe
-    'https://claude.ai/new': 0.6,                    // 60% — safe
-    'https://developer.mozilla.org/en-US/': 0.78,    // 78% — expiring
-    'https://stackoverflow.com/questions': 0.85,     // 85% — expiring
-    'https://www.youtube.com/': 0.92,                // 92% — critical
-    'https://x.com/home': 0.97,                      // 97% — critical
+    'https://mail.google.com/mail/u/0/#inbox': 0.02, // whitelisted, almost fresh
+    'https://github.com/': 0.1,                      // 10% — just opened
+    'https://news.ycombinator.com/': 0.25,           // 25% — fairly recent
+    'https://react.dev/': 0.3,                       // 30% — grouped
+    'https://claude.ai/new': 0.5,                    // 50% — middle
+    'https://developer.mozilla.org/en-US/': 0.7,     // 70% — getting old
+    'https://stackoverflow.com/questions': 0.85,     // 85% — expiring soon
+    'https://www.youtube.com/': 0.93,                // 93% — almost gone
+    'https://x.com/home': 0.98,                      // 98% — critical
   };
   for (const [url, agePct] of Object.entries(ages)) {
     mockLocalStorage.tabActivity[url] = now - expireMs * agePct;
