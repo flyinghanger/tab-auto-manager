@@ -76,23 +76,21 @@
     .checkbox-row { display: flex; align-items: center; gap: 6px; }
     .checkbox-row input[type="checkbox"] { accent-color: #4f46e5; }
 
-    /* ── Stats ── */
-    .stats {
-      display: flex; gap: 16px; padding: 10px 16px;
-      background: #f9fafb; border-bottom: 1px solid #eee;
+    /* ── Stats Nav ── */
+    .stats-nav {
+      display: flex; border-bottom: 1px solid #eee;
+      background: #f9fafb;
     }
-    .stat { text-align: center; flex: 1; }
-    .stat-value { font-size: 20px; font-weight: 600; color: #4f46e5; }
-    .stat-label { font-size: 11px; color: #999; margin-top: 2px; }
-
-    /* ── Tab nav ── */
-    .tabs-nav { display: flex; border-bottom: 1px solid #eee; }
-    .tabs-nav button {
-      flex: 1; padding: 9px; border: none; background: none;
-      cursor: pointer; font-size: 12px; color: #999;
-      border-bottom: 2px solid transparent; transition: all 0.15s;
+    .stat-tab {
+      flex: 1; text-align: center; padding: 10px 0 8px;
+      cursor: pointer; border-bottom: 2px solid transparent;
+      transition: all 0.15s;
     }
-    .tabs-nav button.active { color: #4f46e5; border-bottom-color: #4f46e5; }
+    .stat-tab:hover { background: #f0f0f5; }
+    .stat-tab.active { border-bottom-color: #4f46e5; }
+    .stat-tab .stat-value { font-size: 20px; font-weight: 600; color: #bbb; transition: color 0.15s; }
+    .stat-tab.active .stat-value { color: #4f46e5; }
+    .stat-tab .stat-label { font-size: 11px; color: #999; margin-top: 2px; }
 
     /* ── Tab list ── */
     .section { padding: 8px 16px; }
@@ -221,25 +219,19 @@
     </div>
   </div>
 
-  <div class="stats">
-    <div class="stat">
+  <div class="stats-nav">
+    <div class="stat-tab active" data-tab="allTabs">
       <div class="stat-value" id="totalTabs">0</div>
       <div class="stat-label">Open</div>
     </div>
-    <div class="stat">
-      <div class="stat-value" id="expiringSoon">0</div>
-      <div class="stat-label">Expiring</div>
-    </div>
-    <div class="stat">
+    <div class="stat-tab" data-tab="history">
       <div class="stat-value" id="totalClosed">0</div>
       <div class="stat-label">Closed</div>
     </div>
-  </div>
-
-  <div class="tabs-nav">
-    <button class="active" data-tab="allTabs">Open</button>
-    <button data-tab="history">Closed</button>
-    <button data-tab="whitelist">Whitelist</button>
+    <div class="stat-tab" data-tab="whitelist">
+      <div class="stat-value" id="whitelistCount">0</div>
+      <div class="stat-label">Whitelist</div>
+    </div>
   </div>
 
   <div class="section" id="allTabsSection">

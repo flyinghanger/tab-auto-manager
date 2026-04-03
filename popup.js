@@ -150,7 +150,6 @@ async function loadStats() {
   }
 
   document.getElementById('totalTabs').textContent = userTabs.length;
-  document.getElementById('expiringSoon').textContent = expiringTabs.length;
   document.getElementById('totalClosed').textContent = closedHistory.length;
 
   // Deduplicate history by URL, keeping the most recent entry
@@ -289,6 +288,7 @@ function renderHistory(history) {
 
 async function loadWhitelist() {
   const { whitelist = [] } = await chrome.storage.sync.get('whitelist');
+  document.getElementById('whitelistCount').textContent = whitelist.length;
   renderWhitelist(whitelist);
 }
 
@@ -375,13 +375,13 @@ function setupListeners() {
     await loadStats();
   });
 
-  // Tab navigation
+  // Stats-nav tab switching
   const sections = { allTabs: 'allTabsSection', history: 'historySection', whitelist: 'whitelistSection' };
-  document.querySelectorAll('.tabs-nav button').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tabs-nav button').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      const active = btn.dataset.tab;
+  document.querySelectorAll('.stat-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.stat-tab').forEach((t) => t.classList.remove('active'));
+      tab.classList.add('active');
+      const active = tab.dataset.tab;
       for (const [key, id] of Object.entries(sections)) {
         document.getElementById(id).style.display = key === active ? '' : 'none';
       }
