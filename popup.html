@@ -237,12 +237,17 @@
   </div>
 
   <div class="tabs-nav">
-    <button class="active" data-tab="expiring">Expiring Soon</button>
-    <button data-tab="history">Recently Closed</button>
+    <button class="active" data-tab="allTabs">All Open</button>
+    <button data-tab="expiring">Expiring</button>
+    <button data-tab="history">Closed</button>
     <button data-tab="whitelist">Whitelist</button>
   </div>
 
-  <div class="section" id="expiringSection">
+  <div class="section" id="allTabsSection">
+    <div class="tab-list" id="allTabsList"></div>
+  </div>
+
+  <div class="section" id="expiringSection" style="display: none;">
     <div class="tab-list" id="expiringList"></div>
   </div>
 

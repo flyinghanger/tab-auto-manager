@@ -134,8 +134,70 @@ async function loadStats() {
     return true;
   });
 
+  renderAllTabs(userTabs);
   renderExpiringTabs(expiringTabs);
   renderHistory(dedupedHistory);
+}
+
+function renderAllTabs(tabs) {
+  const list = document.getElementById('allTabsList');
+  if (tabs.length === 0) {
+    list.innerHTML = '<div class="empty-state">No open tabs</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  for (const tab of tabs) {
+    const item = document.createElement('div');
+    item.className = 'tab-item tab-item-clickable';
+
+    const favicon = document.createElement('img');
+    favicon.className = 'tab-favicon';
+    favicon.src = tab.favIconUrl || 'icons/icon16.png';
+    favicon.onerror = () => { favicon.src = 'icons/icon16.png'; };
+
+    const info = document.createElement('div');
+    info.className = 'tab-info';
+
+    const title = document.createElement('div');
+    title.className = 'tab-title';
+    title.title = tab.title || '';
+    title.textContent = tab.title || 'Untitled';
+
+    const meta = document.createElement('div');
+    meta.className = 'tab-meta';
+    const badges = [];
+    if (tab.active) badges.push('active');
+    if (tab.pinned) badges.push('pinned');
+    if (tab.groupId !== -1) badges.push('grouped');
+    try { badges.push(new URL(tab.url).hostname); } catch {}
+    meta.textContent = badges.join(' · ');
+
+    info.append(title, meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'tab-actions';
+
+    if (!tab.active) {
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'btn-sm btn-danger';
+      closeBtn.textContent = 'Close';
+      closeBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await chrome.tabs.remove(tab.id);
+        await loadStats();
+      });
+      actions.appendChild(closeBtn);
+    }
+
+    item.addEventListener('click', () => {
+      chrome.tabs.update(tab.id, { active: true });
+      chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
+    });
+
+    item.append(favicon, info, actions);
+    list.appendChild(item);
+  }
 }
 
 function renderExpiringTabs(tabs) {
@@ -352,7 +414,7 @@ function setupListeners() {
   });
 
   // Tab navigation
-  const sections = { expiring: 'expiringSection', history: 'historySection', whitelist: 'whitelistSection' };
+  const sections = { allTabs: 'allTabsSection', expiring: 'expiringSection', history: 'historySection', whitelist: 'whitelistSection' };
   document.querySelectorAll('.tabs-nav button').forEach((btn) => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tabs-nav button').forEach((b) => b.classList.remove('active'));
