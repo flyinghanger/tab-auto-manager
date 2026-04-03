@@ -1,9 +1,6 @@
 const ALARM_NAME = 'tab-cleanup-check';
 const BADGE_ALARM = 'badge-update';
-const CHECK_INTERVAL_MINUTES = 15;
-const BADGE_INTERVAL_MINUTES = 5;
-const DEFAULT_EXPIRE_DAYS = 3;
-const NOTIFY_BEFORE_MS = 60 * 60 * 1000; // 1 hour before closing
+const DEFAULT_EXPIRE_SECONDS = 3 * 24 * 60 * 60; // 3 days
 
 // Protected URL schemes that should never be auto-closed
 const PROTECTED_SCHEMES = ['chrome://', 'chrome-extension://', 'devtools://'];
@@ -52,8 +49,12 @@ async function reconcileTabs() {
 }
 
 async function setupAlarms() {
-  await chrome.alarms.create(ALARM_NAME, { periodInMinutes: CHECK_INTERVAL_MINUTES });
-  await chrome.alarms.create(BADGE_ALARM, { periodInMinutes: BADGE_INTERVAL_MINUTES });
+  const settings = await getSettings();
+  // Use shorter check interval for short expire times (min 0.5 min for MV3)
+  const checkMinutes = settings.expireSeconds < 120 ? 0.5 : 15;
+  const badgeMinutes = settings.expireSeconds < 120 ? 0.5 : 5;
+  await chrome.alarms.create(ALARM_NAME, { periodInMinutes: checkMinutes });
+  await chrome.alarms.create(BADGE_ALARM, { periodInMinutes: badgeMinutes });
 }
 
 // ─── Activity tracking ──────────────────────────────────────
@@ -120,15 +121,20 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 // ─── Settings helpers ───────────────────────────────────────
 
 async function getSettings() {
-  const defaults = {
-    expireDays: DEFAULT_EXPIRE_DAYS,
+  const stored = await chrome.storage.sync.get({
+    expireSeconds: null,
+    expireDays: null,
     enabled: true,
     whitelist: [],
     notifyBeforeClose: true,
     skipGroupedTabs: true,
-  };
-  const stored = await chrome.storage.sync.get(Object.keys(defaults));
-  return { ...defaults, ...stored };
+  });
+  // Backward compat: migrate expireDays to expireSeconds
+  if (stored.expireSeconds == null) {
+    stored.expireSeconds = (stored.expireDays || 3) * 24 * 60 * 60;
+  }
+  delete stored.expireDays;
+  return stored;
 }
 
 function isWhitelisted(url, whitelist) {
@@ -159,7 +165,7 @@ async function updateBadge() {
 
   const { tabActivity = {} } = await chrome.storage.local.get('tabActivity');
   const tabs = await chrome.tabs.query({});
-  const expireMs = settings.expireDays * 24 * 60 * 60 * 1000;
+  const expireMs = settings.expireSeconds * 1000;
   const soonMs = expireMs * 0.75;
   const now = Date.now();
 
@@ -184,7 +190,8 @@ async function cleanupInactiveTabs() {
 
   if (!settings.enabled) return;
 
-  const expireMs = settings.expireDays * 24 * 60 * 60 * 1000;
+  const expireMs = settings.expireSeconds * 1000;
+  const notifyBeforeMs = Math.min(expireMs * 0.1, 60 * 60 * 1000);
   const now = Date.now();
 
   const tabs = await chrome.tabs.query({});
@@ -240,7 +247,7 @@ async function cleanupInactiveTabs() {
     }
 
     // Tab is about to expire → notify
-    if (settings.notifyBeforeClose && timeLeft <= NOTIFY_BEFORE_MS && !notifiedUrls[tab.url]) {
+    if (settings.notifyBeforeClose && timeLeft <= notifyBeforeMs && !notifiedUrls[tab.url]) {
       aboutToExpire.push(tab);
       notifiedUrls[tab.url] = true;
     }
@@ -276,6 +283,11 @@ async function cleanupInactiveTabs() {
 
   await chrome.storage.local.set({ tabActivity, tabIdToUrl, notifiedUrls });
 }
+
+// Re-setup alarms when expire time changes
+chrome.storage.sync.onChanged.addListener((changes) => {
+  if (changes.expireSeconds) setupAlarms();
+});
 
 // ─── Message handler (for popup communication) ─────────────
 

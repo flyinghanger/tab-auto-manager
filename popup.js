@@ -1,40 +1,73 @@
-const DEFAULT_EXPIRE_DAYS = 3;
+const DEFAULT_EXPIRE_SECONDS = 3 * 24 * 60 * 60; // 3 days
+const UNIT_MULTIPLIERS = [1, 60, 3600, 86400]; // s, m, h, d
 
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
-  await loadSettings();
-  await loadStats();
-  await loadWhitelist();
+  await Promise.all([loadSettings(), loadStats(), loadWhitelist()]);
   setupListeners();
 }
 
 // ─── Settings ───────────────────────────────────────────────
 
 async function loadSettings() {
-  const { expireDays = DEFAULT_EXPIRE_DAYS } = await chrome.storage.sync.get('expireDays');
-  const { enabled = true } = await chrome.storage.sync.get('enabled');
-  const { notifyBeforeClose = true } = await chrome.storage.sync.get('notifyBeforeClose');
-  const { skipGroupedTabs = true } = await chrome.storage.sync.get('skipGroupedTabs');
-
-  document.getElementById('enableToggle').checked = enabled;
-  document.getElementById('notifyToggle').checked = notifyBeforeClose;
-  document.getElementById('skipGroupToggle').checked = skipGroupedTabs;
-
-  document.querySelectorAll('.day-btn').forEach((btn) => {
-    btn.classList.toggle('active', Number(btn.dataset.days) === expireDays);
+  const settings = await chrome.storage.sync.get({
+    expireSeconds: null,
+    expireDays: null,
+    enabled: true,
+    notifyBeforeClose: true,
+    skipGroupedTabs: true,
   });
+
+  // Backward compat
+  let expireSeconds = settings.expireSeconds;
+  if (expireSeconds == null) {
+    expireSeconds = (settings.expireDays || 3) * 86400;
+  }
+
+  document.getElementById('enableToggle').checked = settings.enabled;
+  document.getElementById('notifyToggle').checked = settings.notifyBeforeClose;
+  document.getElementById('skipGroupToggle').checked = settings.skipGroupedTabs;
+
+  // Highlight matching preset or fill custom input
+  let matchedPreset = false;
+  document.querySelectorAll('.day-btn').forEach((btn) => {
+    const match = Number(btn.dataset.seconds) === expireSeconds;
+    btn.classList.toggle('active', match);
+    if (match) matchedPreset = true;
+  });
+
+  const customValue = document.getElementById('customValue');
+  const customUnit = document.getElementById('customUnit');
+  if (!matchedPreset) {
+    // Find best unit to display
+    const unit = getBestUnit(expireSeconds);
+    customUnit.value = String(unit);
+    customValue.value = expireSeconds / unit;
+  } else {
+    customValue.value = '';
+  }
+}
+
+function getBestUnit(seconds) {
+  if (seconds >= 86400 && seconds % 86400 === 0) return 86400;
+  if (seconds >= 3600 && seconds % 3600 === 0) return 3600;
+  if (seconds >= 60 && seconds % 60 === 0) return 60;
+  return 1;
 }
 
 // ─── Stats & Tab Lists ─────────────────────────────────────
 
 async function loadStats() {
-  const { tabActivity = {} } = await chrome.storage.local.get('tabActivity');
-  const { closedHistory = [] } = await chrome.storage.local.get('closedHistory');
-  const { expireDays = DEFAULT_EXPIRE_DAYS } = await chrome.storage.sync.get('expireDays');
+  const [{ tabActivity = {}, closedHistory = [] }, syncData] =
+    await Promise.all([
+      chrome.storage.local.get(['tabActivity', 'closedHistory']),
+      chrome.storage.sync.get({ expireSeconds: null, expireDays: null }),
+    ]);
 
+  const expireSeconds = syncData.expireSeconds ?? (syncData.expireDays || 3) * 86400;
   const tabs = await chrome.tabs.query({});
-  const expireMs = expireDays * 24 * 60 * 60 * 1000;
+  const expireMs = expireSeconds * 1000;
   const soonMs = expireMs * 0.75;
   const now = Date.now();
 
@@ -261,16 +294,31 @@ function setupListeners() {
     await chrome.storage.sync.set({ skipGroupedTabs: e.target.checked });
   });
 
-  // Day selector
+  // Preset buttons
   document.querySelectorAll('.day-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const days = Number(btn.dataset.days);
-      await chrome.storage.sync.set({ expireDays: days });
+      const seconds = Number(btn.dataset.seconds);
+      await chrome.storage.sync.set({ expireSeconds: seconds });
       document.querySelectorAll('.day-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
+      document.getElementById('customValue').value = '';
       await loadStats();
     });
   });
+
+  // Custom time input
+  const customValue = document.getElementById('customValue');
+  const customUnit = document.getElementById('customUnit');
+  const applyCustom = async () => {
+    const val = Number(customValue.value);
+    if (!val || val <= 0) return;
+    const seconds = val * Number(customUnit.value);
+    await chrome.storage.sync.set({ expireSeconds: seconds });
+    document.querySelectorAll('.day-btn').forEach((b) => b.classList.remove('active'));
+    await loadStats();
+  };
+  customValue.addEventListener('change', applyCustom);
+  customUnit.addEventListener('change', applyCustom);
 
   // Tab navigation
   const sections = { expiring: 'expiringSection', history: 'historySection', whitelist: 'whitelistSection' };

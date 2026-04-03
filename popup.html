@@ -55,6 +55,18 @@
     .day-btn:hover { border-color: #4f46e5; color: #4f46e5; }
     .day-btn.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
 
+    .custom-time { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+    .custom-time input {
+      width: 60px; padding: 4px 6px; border: 1px solid #ddd; border-radius: 6px;
+      font-size: 12px; outline: none; text-align: center;
+    }
+    .custom-time input:focus { border-color: #4f46e5; }
+    .custom-time select {
+      padding: 4px 6px; border: 1px solid #ddd; border-radius: 6px;
+      font-size: 12px; outline: none; background: #fff; cursor: pointer;
+    }
+    .custom-time select:focus { border-color: #4f46e5; }
+
     .checkbox-row { display: flex; align-items: center; gap: 6px; }
     .checkbox-row input[type="checkbox"] { accent-color: #4f46e5; }
 
@@ -163,10 +175,22 @@
     <div class="setting-row">
       <span class="setting-label">Auto-close after</span>
       <div class="day-selector">
-        <button class="day-btn" data-days="1">1d</button>
-        <button class="day-btn" data-days="3">3d</button>
-        <button class="day-btn" data-days="7">7d</button>
-        <button class="day-btn" data-days="14">14d</button>
+        <button class="day-btn" data-seconds="86400">1d</button>
+        <button class="day-btn" data-seconds="259200">3d</button>
+        <button class="day-btn" data-seconds="604800">7d</button>
+        <button class="day-btn" data-seconds="1209600">14d</button>
+      </div>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">Custom</span>
+      <div class="custom-time">
+        <input type="number" id="customValue" min="1" placeholder="10">
+        <select id="customUnit">
+          <option value="1">s</option>
+          <option value="60">m</option>
+          <option value="3600">h</option>
+          <option value="86400">d</option>
+        </select>
       </div>
     </div>
     <div class="setting-row">
