@@ -161,7 +161,7 @@ function renderAllTabs(tabs, expiryMap) {
   list.innerHTML = '';
   for (const tab of tabs) {
     const expiry = expiryMap[tab.id];
-    const isCritical = expiry && expiry.timeLeft < expiry.expireMs * 0.1;
+    const isCritical = expiry && expiry.timeLeft < 60000;
 
     const item = document.createElement('div');
     item.className = `tab-item tab-item-clickable ${isCritical ? 'tab-expire-soon' : ''}`;
@@ -187,24 +187,11 @@ function renderAllTabs(tabs, expiryMap) {
     if (tab.groupId !== -1) badges.push('grouped');
     try { badges.push(new URL(tab.url).hostname); } catch {}
     if (expiry) {
-      badges.push(formatTimeLeft(expiry.timeLeft, expiry.expireMs));
+      badges.push(formatTimeLeft(expiry.timeLeft));
     }
     meta.textContent = badges.join(' · ');
 
     info.append(title, meta);
-
-    // Show progress bar for expiring tabs
-    if (expiry) {
-      const pct = Math.max(0, Math.min(100, (expiry.timeLeft / expiry.expireMs) * 100));
-      const progressClass = pct < 10 ? 'progress-danger' : pct < 25 ? 'progress-warn' : 'progress-safe';
-      const progress = document.createElement('div');
-      progress.className = 'progress-bar';
-      const fill = document.createElement('div');
-      fill.className = `progress-fill ${progressClass}`;
-      fill.style.width = `${pct}%`;
-      progress.appendChild(fill);
-      info.appendChild(progress);
-    }
 
     const actions = document.createElement('div');
     actions.className = 'tab-actions';
@@ -418,19 +405,16 @@ function setupListeners() {
 
 // ─── Formatters ─────────────────────────────────────────────
 
-function formatTimeLeft(ms, expireMs) {
+function formatTimeLeft(ms) {
   if (ms <= 0) return 'Closing soon...';
   const totalSeconds = Math.floor(ms / 1000);
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  // Only show seconds when in the critical zone (last 10% of expire time)
-  const critical = expireMs ? ms < expireMs * 0.1 : minutes === 0;
   if (days > 0) return `${days}d ${hours}h left`;
   if (hours > 0) return `${hours}h ${minutes}m left`;
-  if (minutes > 0 && !critical) return `${minutes}m left`;
-  if (minutes > 0) return `${minutes}m ${seconds}s left`;
+  if (minutes > 0) return `${minutes}m left`;
   return `${seconds}s left`;
 }
 
