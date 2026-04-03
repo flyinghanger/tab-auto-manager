@@ -1,11 +1,18 @@
 const DEFAULT_EXPIRE_SECONDS = 3 * 24 * 60 * 60; // 3 days
-const UNIT_MULTIPLIERS = [1, 60, 3600, 86400]; // s, m, h, d
+const PROTECTED_SCHEMES = ['chrome://', 'chrome-extension://', 'devtools://'];
+let refreshTimer = null;
 
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
   await Promise.all([loadSettings(), loadStats(), loadWhitelist()]);
   setupListeners();
+  startAutoRefresh();
+}
+
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(loadStats, 1000);
 }
 
 // ─── Settings ───────────────────────────────────────────────
@@ -75,6 +82,7 @@ async function loadStats() {
 
   for (const tab of tabs) {
     if (tab.pinned || tab.active) continue;
+    if (!tab.url || PROTECTED_SCHEMES.some((s) => tab.url.startsWith(s))) continue;
     const lastActive = tabActivity[tab.url];
     if (!lastActive) continue;
 
@@ -99,8 +107,16 @@ async function loadStats() {
   document.getElementById('expiringSoon').textContent = expiringTabs.length;
   document.getElementById('totalClosed').textContent = closedHistory.length;
 
+  // Deduplicate history by URL, keeping the most recent entry
+  const seenUrls = new Set();
+  const dedupedHistory = closedHistory.filter((item) => {
+    if (seenUrls.has(item.url)) return false;
+    seenUrls.add(item.url);
+    return true;
+  });
+
   renderExpiringTabs(expiringTabs);
-  renderHistory(closedHistory);
+  renderHistory(dedupedHistory);
 }
 
 function renderExpiringTabs(tabs) {
@@ -112,7 +128,7 @@ function renderExpiringTabs(tabs) {
 
   list.innerHTML = '';
   for (const tab of tabs) {
-    const isCritical = tab.timeLeft < 60 * 60 * 1000;
+    const isCritical = tab.timeLeft < tab.expireMs * 0.1;
     const pct = Math.max(0, Math.min(100, (tab.timeLeft / tab.expireMs) * 100));
     const progressClass = pct < 10 ? 'progress-danger' : pct < 25 ? 'progress-warn' : 'progress-safe';
 
@@ -306,19 +322,15 @@ function setupListeners() {
     });
   });
 
-  // Custom time input
-  const customValue = document.getElementById('customValue');
-  const customUnit = document.getElementById('customUnit');
-  const applyCustom = async () => {
-    const val = Number(customValue.value);
+  // Custom time input — only apply on button click
+  document.getElementById('customApply').addEventListener('click', async () => {
+    const val = Number(document.getElementById('customValue').value);
     if (!val || val <= 0) return;
-    const seconds = val * Number(customUnit.value);
+    const seconds = val * Number(document.getElementById('customUnit').value);
     await chrome.storage.sync.set({ expireSeconds: seconds });
     document.querySelectorAll('.day-btn').forEach((b) => b.classList.remove('active'));
     await loadStats();
-  };
-  customValue.addEventListener('change', applyCustom);
-  customUnit.addEventListener('change', applyCustom);
+  });
 
   // Tab navigation
   const sections = { expiring: 'expiringSection', history: 'historySection', whitelist: 'whitelistSection' };
@@ -344,12 +356,15 @@ function setupListeners() {
 
 function formatTimeLeft(ms) {
   if (ms <= 0) return 'Closing soon...';
-  const hours = Math.floor(ms / (1000 * 60 * 60));
-  const days = Math.floor(hours / 24);
-  if (days > 0) return `${days}d ${hours % 24}h left`;
-  if (hours > 0) return `${hours}h left`;
-  const minutes = Math.floor(ms / (1000 * 60));
-  return `${minutes}m left`;
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (days > 0) return `${days}d ${hours}h left`;
+  if (hours > 0) return `${hours}h ${minutes}m left`;
+  if (minutes > 0) return `${minutes}m ${seconds}s left`;
+  return `${seconds}s left`;
 }
 
 function formatTimeAgo(timestamp) {
