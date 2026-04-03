@@ -97,7 +97,6 @@ async function loadStats() {
   const expireSeconds = syncData.expireSeconds ?? (syncData.expireDays || 3) * 86400;
   const tabs = await chrome.tabs.query({});
   const expireMs = expireSeconds * 1000;
-  const soonMs = expireMs * 0.75;
   const now = Date.now();
 
   const expiringTabs = [];
@@ -111,18 +110,16 @@ async function loadStats() {
     if (!lastActive) continue;
 
     const elapsed = now - lastActive;
-    if (elapsed > soonMs) {
-      expiringTabs.push({
-        id: tab.id,
-        windowId: tab.windowId,
-        title: tab.title,
-        url: tab.url,
-        favIconUrl: tab.favIconUrl,
-        timeLeft: expireMs - elapsed,
-        elapsed,
-        expireMs,
-      });
-    }
+    expiringTabs.push({
+      id: tab.id,
+      windowId: tab.windowId,
+      title: tab.title,
+      url: tab.url,
+      favIconUrl: tab.favIconUrl,
+      timeLeft: expireMs - elapsed,
+      elapsed,
+      expireMs,
+    });
   }
 
   expiringTabs.sort((a, b) => a.timeLeft - b.timeLeft);
