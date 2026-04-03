@@ -2,7 +2,11 @@ const DEFAULT_EXPIRE_SECONDS = 3 * 24 * 60 * 60; // 3 days
 const PROTECTED_SCHEMES = ['chrome://', 'chrome-extension://', 'devtools://'];
 let refreshTimer = null;
 
-document.addEventListener('DOMContentLoaded', init);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
 
 async function init() {
   await Promise.all([loadSettings(), loadStats(), loadWhitelist()]);
@@ -85,9 +89,10 @@ async function loadStats() {
   const [{ tabActivity = {}, closedHistory = [] }, syncData] =
     await Promise.all([
       chrome.storage.local.get(['tabActivity', 'closedHistory']),
-      chrome.storage.sync.get({ expireSeconds: null, expireDays: null, whitelist: [] }),
+      chrome.storage.sync.get({ expireSeconds: null, expireDays: null, whitelist: [], skipGroupedTabs: true }),
     ]);
   const whitelist = syncData.whitelist || [];
+  const skipGrouped = syncData.skipGroupedTabs !== false;
 
   const expireSeconds = syncData.expireSeconds ?? (syncData.expireDays || 3) * 86400;
   const tabs = await chrome.tabs.query({});
@@ -101,6 +106,7 @@ async function loadStats() {
     if (tab.pinned || tab.active) continue;
     if (!tab.url || PROTECTED_SCHEMES.some((s) => tab.url.startsWith(s))) continue;
     if (isWhitelisted(tab.url, whitelist)) continue;
+    if (skipGrouped && tab.groupId !== -1) continue;
     const lastActive = tabActivity[tab.url];
     if (!lastActive) continue;
 
