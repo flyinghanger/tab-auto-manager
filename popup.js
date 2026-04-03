@@ -1,5 +1,6 @@
 const DEFAULT_EXPIRE_SECONDS = 3 * 24 * 60 * 60; // 3 days
 const PROTECTED_SCHEMES = ['chrome://', 'chrome-extension://', 'devtools://'];
+const failedFavicons = new Set();
 let refreshTimer = null;
 
 if (document.readyState === 'loading') {
@@ -83,6 +84,22 @@ function isWhitelisted(url, whitelist) {
   }
 }
 
+function createFavicon(url) {
+  const img = document.createElement('img');
+  img.className = 'tab-favicon';
+  const src = url && !failedFavicons.has(url) ? url : 'icons/icon16.png';
+  img.src = src;
+  if (url) {
+    img.dataset.original = url;
+    img.onerror = () => {
+      img.onerror = null;
+      failedFavicons.add(url);
+      img.src = 'icons/icon16.png';
+    };
+  }
+  return img;
+}
+
 // ─── Stats & Tab Lists ─────────────────────────────────────
 
 async function loadStats() {
@@ -163,10 +180,7 @@ function renderAllTabs(tabs, expiryMap) {
     const item = document.createElement('div');
     item.className = `tab-item tab-item-clickable ${isCritical ? 'tab-expire-soon' : ''}`;
 
-    const favicon = document.createElement('img');
-    favicon.className = 'tab-favicon';
-    favicon.src = tab.favIconUrl || 'icons/icon16.png';
-    favicon.onerror = () => { favicon.src = 'icons/icon16.png'; };
+    const favicon = createFavicon(tab.favIconUrl);
 
     const info = document.createElement('div');
     info.className = 'tab-info';
@@ -239,10 +253,7 @@ function renderHistory(history) {
     const row = document.createElement('div');
     row.className = 'tab-item';
 
-    const favicon = document.createElement('img');
-    favicon.className = 'tab-favicon';
-    favicon.src = item.favIconUrl || 'icons/icon16.png';
-    favicon.onerror = () => { favicon.src = 'icons/icon16.png'; };
+    const favicon = createFavicon(item.favIconUrl);
 
     const info = document.createElement('div');
     info.className = 'tab-info';
