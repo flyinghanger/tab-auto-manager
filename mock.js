@@ -12,7 +12,7 @@ const MOCK_TABS = [
   { id: 10, windowId: 1, active: false, pinned: false, groupId: -1, title: 'Hacker News', url: 'https://news.ycombinator.com/', favIconUrl: '' },
 ];
 
-const MOCK_EXPIRE_SECONDS = 5 * 60; // 5 minutes for visible spread
+const MOCK_EXPIRE_SECONDS = 3 * 24 * 60 * 60; // 3 days
 
 const mockSyncStorage = {
   expireSeconds: MOCK_EXPIRE_SECONDS,
@@ -37,20 +37,21 @@ const mockLocalStorage = {
 (function seedActivity() {
   const now = Date.now();
   const expireMs = MOCK_EXPIRE_SECONDS * 1000;
-  const ages = {
-    'http://localhost:3000/preview.html': 0,         // active, just now
-    'https://mail.google.com/mail/u/0/#inbox': 0.02, // whitelisted, almost fresh
-    'https://github.com/': 0.1,                      // 10% — just opened
-    'https://news.ycombinator.com/': 0.25,           // 25% — fairly recent
-    'https://react.dev/': 0.3,                       // 30% — grouped
-    'https://claude.ai/new': 0.5,                    // 50% — middle
-    'https://developer.mozilla.org/en-US/': 0.7,     // 70% — getting old
-    'https://stackoverflow.com/questions': 0.85,     // 85% — expiring soon
-    'https://www.youtube.com/': 0.93,                // 93% — almost gone
-    'https://x.com/home': 0.98,                      // 98% — critical
+  // Absolute offsets so each tab shows a different d/h/m/s combo
+  const offsets = {
+    'http://localhost:3000/preview.html': 0,                           // active
+    'https://mail.google.com/mail/u/0/#inbox': 10 * 60,               // whitelisted
+    'https://github.com/': expireMs - 2 * 86400000 - 3 * 3600000,    // → 2d 3h left
+    'https://news.ycombinator.com/': expireMs - 18 * 3600000,         // → 18h left
+    'https://react.dev/': expireMs - 5 * 3600000 - 30 * 60000,       // → 5h 30m (grouped)
+    'https://claude.ai/new': expireMs - 2 * 3600000 - 15 * 60000,    // → 2h 15m left
+    'https://developer.mozilla.org/en-US/': expireMs - 45 * 60000,   // → 45m left
+    'https://stackoverflow.com/questions': expireMs - 8 * 60000,     // → 8m left
+    'https://www.youtube.com/': expireMs - 90000,                     // → 1m 30s left
+    'https://x.com/home': expireMs - 25000,                           // → 25s left
   };
-  for (const [url, agePct] of Object.entries(ages)) {
-    mockLocalStorage.tabActivity[url] = now - expireMs * agePct;
+  for (const [url, offset] of Object.entries(offsets)) {
+    mockLocalStorage.tabActivity[url] = now - offset;
   }
   MOCK_TABS.forEach((t) => { mockLocalStorage.tabIdToUrl[t.id] = t.url; });
 })();

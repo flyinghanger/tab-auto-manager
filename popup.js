@@ -409,7 +409,7 @@ function formatTimeLeft(ms) {
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  if (days > 0) return `${days}d ${hours}h left`;
+  if (days > 0) return `${days}d ${hours}h ${minutes}m left`;
   if (hours > 0) return `${hours}h ${minutes}m left`;
   if (minutes > 0) return `${minutes}m left`;
   return `${seconds}s left`;
