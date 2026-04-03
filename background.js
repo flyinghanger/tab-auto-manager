@@ -172,6 +172,9 @@ async function updateBadge() {
   let count = 0;
   for (const tab of tabs) {
     if (tab.pinned || tab.active) continue;
+    if (!tab.url || PROTECTED_SCHEMES.some((s) => tab.url.startsWith(s))) continue;
+    if (isWhitelisted(tab.url, settings.whitelist)) continue;
+    if (settings.skipGroupedTabs && tab.groupId !== -1) continue;
     const lastActive = tabActivity[tab.url];
     if (!lastActive) continue;
     if (now - lastActive > soonMs) count++;

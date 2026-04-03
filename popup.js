@@ -121,7 +121,8 @@ async function loadStats() {
 
   expiringTabs.sort((a, b) => a.timeLeft - b.timeLeft);
 
-  document.getElementById('totalTabs').textContent = tabs.length;
+  const userTabs = tabs.filter((t) => t.url && !PROTECTED_SCHEMES.some((s) => t.url.startsWith(s)));
+  document.getElementById('totalTabs').textContent = userTabs.length;
   document.getElementById('expiringSoon').textContent = expiringTabs.length;
   document.getElementById('totalClosed').textContent = closedHistory.length;
 
@@ -367,6 +368,22 @@ function setupListeners() {
   document.getElementById('wlAdd').addEventListener('click', addWhitelistDomain);
   document.getElementById('wlInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') addWhitelistDomain();
+  });
+
+  // Quick-add current tab's domain
+  document.getElementById('wlAddCurrent').addEventListener('click', async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url) return;
+    try {
+      const hostname = new URL(tab.url).hostname;
+      if (!hostname) return;
+      const { whitelist = [] } = await chrome.storage.sync.get('whitelist');
+      if (whitelist.includes(hostname)) return;
+      const updated = [...whitelist, hostname];
+      await chrome.storage.sync.set({ whitelist: updated });
+      renderWhitelist(updated);
+      await loadStats();
+    } catch {}
   });
 }
 
